@@ -502,7 +502,7 @@
         let isFirebaseConfigured = false;
 
         try {
-            if (firebaseConfig.apiKey !== "AIzaSyC71A7tOfdiydhtjOxVUzBEHDUtI1Ky33M") {
+            if (firebaseConfig.apiKey !== "dummy") {
                 const app = initializeApp(firebaseConfig);
                 const analytics = getAnalytics(app);
                 db = firebase.firestore();
