@@ -382,6 +382,21 @@
     </style>
 </head>
 <body>
+    <div id="auth-section" style="max-width:400px;margin:30px auto 0;display:none;">
+        <form id="login-form">
+            <h2>🔒 Login</h2>
+            <div class="form-group">
+                <label for="login-email">Email:</label>
+                <input type="email" id="login-email" required>
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password:</label>
+                <input type="password" id="login-password" required>
+            </div>
+            <button type="submit" class="submit-btn">Login</button>
+        </form>
+        <button id="logout-btn" class="submit-btn" style="display:none;margin-top:10px;">Logout</button>
+    </div>
     <div class="container">
         <div class="header">
             <h1>🚲 Rickshaw Booking</h1>
@@ -477,11 +492,61 @@
     <!-- Firebase SDK -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-firestore-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-auth-compat.min.js"></script>
 
     <script type="module">
         // TODO: Add SDKs for Firebase products that you want to use
         // https://firebase.google.com/docs/web/setup#available-libraries
-      
+        const authSection = document.getElementById('auth-section');
+        const loginForm = document.getElementById('login-form');
+        const logoutBtn = document.getElementById('logout-btn');
+
+        let currentUser = null;
+        let isAdmin = false;
+
+        // Define admin emails (or fetch from Firestore for more flexibility)
+        const adminEmails = [
+            "admin@example.com" // <-- Replace with your admin emails
+        ];
+
+        // Show/hide UI based on auth state
+        firebase.auth().onAuthStateChanged(user => {
+            currentUser = user;
+            isAdmin = user && adminEmails.includes(user.email);
+
+            if (user) {
+                authSection.style.display = 'none';
+                document.querySelector('.container').style.display = '';
+                loadBookings();
+            } else {
+                authSection.style.display = '';
+                document.querySelector('.container').style.display = 'none';
+            }
+        });
+
+        // Login form handler
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            try {
+                await firebase.auth().signInWithEmailAndPassword(email, password);
+                loginForm.reset();
+            } catch (err) {
+                alert('Login failed: ' + err.message);
+            }
+        });
+
+        // Logout handler
+        logoutBtn.addEventListener('click', async () => {
+            await firebase.auth().signOut();
+        });
+
+        // Show logout button when logged in
+        firebase.auth().onAuthStateChanged(user => {
+            logoutBtn.style.display = user ? '' : 'none';
+        });
+
         // Your web app's Firebase configuration
         // For Firebase JS SDK v7.20.0 and later, measurementId is optional
         const firebaseConfig = {
@@ -750,10 +815,15 @@
                     month: 'long',
                     day: 'numeric'
                 });
-                
+
+                // Only show delete button for admins
+                const deleteBtn = isAdmin
+                    ? `<button class="delete-btn" onclick="deleteBooking('${booking.id}')" title="Delete booking">×</button>`
+                    : '';
+
                 return `
                     <div class="booking-item">
-                        <button class="delete-btn" onclick="deleteBooking('${booking.id}')" title="Delete booking">×</button>
+                        ${deleteBtn}
                         <div class="booking-date">${formattedDate}</div>
                         <div class="booking-time">${booking.time}</div>
                         <div class="booking-name">👤 ${booking.name}</div>
