@@ -509,6 +509,21 @@
             "admin@example.com" // <-- Replace with your admin emails
         ];
 
+        // Initialize Firebase
+        let db;
+        let isFirebaseConfigured = false;
+
+        try {
+            if (firebaseConfig.apiKey !== "dummy") {
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                isFirebaseConfigured = true;
+                document.getElementById('firebase-config-alert').style.display = 'none';
+            }
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+        }
+
         // Show/hide UI based on auth state
         firebase.auth().onAuthStateChanged(user => {
             currentUser = user;
@@ -558,21 +573,6 @@
           appId: "1:633278327629:web:a281cf4c907739d135e504",
           measurementId: "G-BN3EQPZSYL"
         };
-
-        // Initialize Firebase
-        let db;
-        let isFirebaseConfigured = false;
-
-        try {
-            if (firebaseConfig.apiKey !== "dummy") {
-                firebase.initializeApp(firebaseConfig);
-                db = firebase.firestore();
-                isFirebaseConfigured = true;
-                document.getElementById('firebase-config-alert').style.display = 'none';
-            }
-        } catch (error) {
-            console.error("Firebase initialization error:", error);
-        }
 
         // App state
         const currentDate = new Date();
