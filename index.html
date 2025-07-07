@@ -382,9 +382,9 @@
     </style>
 </head>
 <body>
-    <div id="auth-section" style="max-width:400px;margin:30px auto 0;display:none;">
+    <div id="auth-section" style="max-width:400px;margin:30px auto 0;">
         <form id="login-form">
-            <h2>🔒 Login</h2>
+            <h2>🔒 Admin Login</h2>
             <div class="form-group">
                 <label for="login-email">Email:</label>
                 <input type="email" id="login-email" required>
@@ -393,8 +393,9 @@
                 <label for="login-password">Password:</label>
                 <input type="password" id="login-password" required>
             </div>
-            <button type="submit" class="submit-btn">Login</button>
+            <button type="submit" class="submit-btn">Login as Admin</button>
         </form>
+        <button id="guest-btn" class="submit-btn" style="margin-top:10px;">Continue as Guest</button>
         <button id="logout-btn" class="submit-btn" style="display:none;margin-top:10px;">Logout</button>
     </div>
     <div class="container">
@@ -410,6 +411,11 @@
         <div class="booking-section">
             <div class="calendar-container">
                 <h2>📅 Select Date</h2>
+                <div class="calendar-header" style="align-items: center;">
+                    <button id="calendar-prev" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&#8592;</button>
+                    <span id="calendar-month-label" style="flex:1;text-align:center;font-weight:bold;font-size:1.1rem;"></span>
+                    <button id="calendar-next" style="background:none;border:none;font-size:1.5rem;cursor:pointer;">&#8594;</button>
+                </div>
                 <div class="calendar-header">
                     <div class="day-header">Mon</div>
                     <div class="day-header">Tue</div>
@@ -501,18 +507,29 @@
         const loginForm = document.getElementById('login-form');
         const logoutBtn = document.getElementById('logout-btn');
 
+        let calendarMonth = (new Date()).getMonth();
+        let calendarYear = (new Date()).getFullYear();
         let currentUser = null;
         let isAdmin = false;
+        let isGuest = false;
 
-        // Define admin emails (or fetch from Firestore for more flexibility)
-        const adminEmails = [
-            "admin@example.com" // <-- Replace with your admin emails
-        ];
+        const guestBtn = document.getElementById('guest-btn');
 
         // Initialize Firebase
         let db;
         let isFirebaseConfigured = false;
 
+        // Your web app's Firebase configuration
+        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+        const firebaseConfig = {
+          apiKey: "AIzaSyC71A7tOfdiydhtjOxVUzBEHDUtI1Ky33M",
+          authDomain: "tvb-rickshaw.firebaseapp.com",
+          projectId: "tvb-rickshaw",
+          storageBucket: "tvb-rickshaw.firebasestorage.app",
+          messagingSenderId: "633278327629",
+          appId: "1:633278327629:web:a281cf4c907739d135e504",
+          measurementId: "G-BN3EQPZSYL"
+        };
         try {
             if (firebaseConfig.apiKey !== "dummy") {
                 firebase.initializeApp(firebaseConfig);
@@ -523,6 +540,54 @@
         } catch (error) {
             console.error("Firebase initialization error:", error);
         }
+                
+        // Auth state
+        firebase.auth().onAuthStateChanged(async user => {
+            currentUser = user;
+            isAdmin = false;
+            isGuest = false;
+            if (user) {
+                // Check admin role
+                try {
+                    const userDoc = await db.collection('users').doc(user.uid).get();
+                    isAdmin = userDoc.exists && userDoc.data().role === 'admin';
+                } catch (err) {
+                    console.error('Error fetching user role:', err);
+                }
+                authSection.style.display = 'none';
+                document.querySelector('.container').style.display = '';
+                loadBookings();
+            } else if (localStorage.getItem('isGuest') === 'true') {
+                isGuest = true;
+                authSection.style.display = 'none';
+                document.querySelector('.container').style.display = '';
+                loadBookings();
+            } else {
+                authSection.style.display = '';
+                document.querySelector('.container').style.display = 'none';
+            }
+        });
+
+        // Guest button handler
+        guestBtn.addEventListener('click', () => {
+            isGuest = true;
+            localStorage.setItem('isGuest', 'true');
+            authSection.style.display = 'none';
+            document.querySelector('.container').style.display = '';
+            loadBookings();
+        });
+
+        // Logout handler (works for both admin and guest)
+        logoutBtn.addEventListener('click', async () => {
+            if (isGuest) {
+                isGuest = false;
+                localStorage.removeItem('isGuest');
+                authSection.style.display = '';
+                document.querySelector('.container').style.display = 'none';
+            } else {
+                await firebase.auth().signOut();
+            }
+        });
 
         // Show/hide UI based on auth state
         firebase.auth().onAuthStateChanged(user => {
@@ -561,18 +626,6 @@
         firebase.auth().onAuthStateChanged(user => {
             logoutBtn.style.display = user ? '' : 'none';
         });
-
-        // Your web app's Firebase configuration
-        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-        const firebaseConfig = {
-          apiKey: "AIzaSyC71A7tOfdiydhtjOxVUzBEHDUtI1Ky33M",
-          authDomain: "tvb-rickshaw.firebaseapp.com",
-          projectId: "tvb-rickshaw",
-          storageBucket: "tvb-rickshaw.firebasestorage.app",
-          messagingSenderId: "633278327629",
-          appId: "1:633278327629:web:a281cf4c907739d135e504",
-          measurementId: "G-BN3EQPZSYL"
-        };
 
         // App state
         const currentDate = new Date();
@@ -633,14 +686,21 @@
             }
         }
 
+        // In addBooking, restrict guests to one booking
         async function addBooking(bookingData) {
             if (!isFirebaseConfigured) {
-                // Fallback to local storage for demo
-                const newBooking = { id: Date.now().toString(), ...bookingData };
-                bookings.push(newBooking);
-                displayBookings();
-                generateCalendar();
+                // ...existing fallback...
                 return newBooking;
+            }
+
+            // Restrict guest to one booking per email (or per session)
+            if (isGuest) {
+                // Check if guest already booked (by email or localStorage)
+                const guestEmail = bookingData.email;
+                const snapshot = await db.collection('bookings').where('email', '==', guestEmail).get();
+                if (!snapshot.empty) {
+                    throw new Error('Guests can only make one booking.');
+                }
             }
 
             try {
@@ -680,8 +740,8 @@
         function generateCalendar() {
             const calendar = document.getElementById('calendar');
             const today = new Date();
-            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-            const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            const firstDay = new Date(calendarYear, calendarMonth, 1);
+            const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
             
             // Calculate first day of week (Monday = 0)
             const startDate = new Date(firstDay);
@@ -693,40 +753,64 @@
             for (let i = 0; i < 42; i++) {
                 const date = new Date(startDate);
                 date.setDate(startDate.getDate() + i);
-                
+
                 const dayElement = document.createElement('div');
                 dayElement.className = 'day';
                 dayElement.textContent = date.getDate();
-                
+
                 const dateStr = date.toISOString().split('T')[0];
-                const isCurrentMonth = date.getMonth() === today.getMonth();
+                const isCurrentMonth = date.getMonth() === calendarMonth && date.getFullYear() === calendarYear;
                 const isToday = dateStr === today.toISOString().split('T')[0];
                 const hasBooking = bookings.some(b => b.date === dateStr);
-                const isPast = date < today.setHours(0,0,0,0);
-                
+                const isPast = date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
                 if (isCurrentMonth) {
                     dayElement.classList.add('current-month');
                 } else {
                     dayElement.classList.add('other-month');
                 }
-                
+
                 if (isToday) {
                     dayElement.classList.add('today');
                 }
-                
+
                 if (hasBooking) {
                     dayElement.classList.add('has-booking');
                 }
-                
+
                 if (!isPast && isCurrentMonth) {
                     dayElement.addEventListener('click', () => selectDate(dateStr, dayElement));
                 } else if (isPast) {
                     dayElement.style.opacity = '0.5';
                     dayElement.style.cursor = 'not-allowed';
                 }
-                
+
                 calendar.appendChild(dayElement);
             }
+
+            // Update month label
+            document.getElementById('calendar-month-label').textContent =
+                `${firstDay.toLocaleString('default', { month: 'long' })} ${calendarYear}`;
+        }
+
+        function prevMonth() {
+            if (calendarMonth === 0) {
+                calendarMonth = 11;
+                calendarYear--;
+            } else {
+                calendarMonth--;
+            }
+            generateCalendar();
+        }
+
+        function nextMonth() {
+            if (calendarMonth === 11) {
+                calendarMonth = 0;
+                calendarYear++;
+            } else {
+                calendarMonth++;
+            }
+            generateCalendar();
         }
 
         function selectDate(dateStr, element) {
@@ -897,6 +981,8 @@
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
             loadBookings();
+            document.getElementById('calendar-prev').addEventListener('click', prevMonth);
+            document.getElementById('calendar-next').addEventListener('click', nextMonth);
         });
     </script>
 </body>
